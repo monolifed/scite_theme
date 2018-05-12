@@ -69,12 +69,20 @@ end
 
 local apply_scheme = function(dir, name)
 	local vars = load_scheme(dir..'/schemes', name)
-	local path = _sf('%s/template.properties', dir)
+	local path = _sf('%s/merged.properties', dir)
+	local filler
 	local key, value
+	local line_no = 0
 	for line in io.lines(path) do
-		key, value = string.match(line, '^([%w_.%-*]+)%s*=%s*([%w%p]*)')
-		if key then
-			props[key] = value:gsub('{{([%w%-]+)}}', vars)
+		line_no = line_no + 1
+		filler = (line:match('%S') == nil) or (line:match('^%s*#') ~= nil)
+		if not filler then
+			key, value = string.match(line, '^([%w_.%-*]+)%s*=%s*([%w%p]*)')
+			if key then
+				props[key] = value:gsub('{{([%w%-]+)}}', vars)
+			else
+				print(_sf('ignoring line %i: %s', line_no, line))
+			end
 		end
 	end
 end
@@ -120,5 +128,45 @@ function prev_theme()
 	cycle_theme(-1)
 end
 
+-- Used from the command line as:
+-- lua scite_theme.lua genprop
+local merge_props = function()
+	local sep = string.rep('#####', 10) .. '\n'
+	local append_file = function(f, unit, title)
+		if not title then title = unit end
+		f:write(sep)
+		f:write(_sf('# [%s]\n', title))
+		f:write(sep)
+		f:write('\n')
+		for line in io.lines(unit) do
+			f:write(line)
+			f:write('\n')
+		end
+		f:write('\n\n')
+		--f:write(sep)
+	end
+	
+	local path = 'merged.properties'
+	local merged = io.open(path,'w')
+	local list = dofile('prop_list.lua')
+	for i, v in ipairs(list) do
+		append_file(merged, 'props/' .. v, v)
+	end
+	merged:close()
+end
 
-change_theme()
+if props then
+	change_theme()
+else
+	local param = table.pack(...)
+	if #param == 0 then
+		print('No parameter given')
+		return
+	end
+	
+	if param[1] == 'genprop' then
+		merge_props()
+		return
+	end
+	print('unknown parameter ' .. param[1])
+end

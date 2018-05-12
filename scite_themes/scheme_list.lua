@@ -1,4 +1,4 @@
--- edited output of ls schemes
+-- modified output of ls schemes
 local scheme_list = {
 '3024',
 'apathy',
