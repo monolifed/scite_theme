@@ -51,7 +51,7 @@ local to_hsl = function(r, g, b)
 end
 
 local to_rgb = function(h, s, l)
-	if s == 0 then return l,l,l end
+	if s == 0 then l = l * 255 return l,l,l end
 	local c
 	if l > 0.5 then c = (2 - 2 * l) * s
 	else c = (2 * l) * s end
