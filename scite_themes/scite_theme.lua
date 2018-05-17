@@ -21,24 +21,85 @@ local valid_yaml = {
 	base0F = '(%x%x%x%x%x%x)', -- Deprecated, Opening/Closing Embedded Language Tags e.g. <?php ?>
 }
 
--- generate base0[0-F]-(hex|(hex|rgb|dec)-(r|g|b)) o_O
-local add_color_vars = function(t, name, colorstr)
-	local r, g, b = string.match(colorstr, '#?(%x%x)(%x%x)(%x%x)')
-	t[name..'-hex'] = colorstr
-	t[name..'-hex-r'], t[name..'-hex-g'], t[name..'-hex-b'] = r, g, b
-	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
-	t[name..'-rgb-r'], t[name..'-rgb-g'], t[name..'-rgb-b'] = r, g, b
-	t[name..'-dec-r'], t[name..'-dec-g'], t[name..'-dec-b'] = r / 255, g / 255, b / 255
+local clamp = function(x, min, max)
+	if x > max then return max end
+	if x < min   then return min end
+	return x
+end
 
-	--[=[
-	-- calculate disabled color
-	local L = 0.2989 * r + 0.5870 * g + 0.1140 * b
-	local m = 0.4
-	r = r + m * (L - r)
-	g = g + m * (L - g)
-	b = b + m * (L - b)
-	t[name..'-des-hex'] = _sf('%02x%02x%02x', r, g, b)
-	--]=]
+
+local to_hsl = function(r, g, b)
+	r, g, b = r / 255, g / 255, b / 255
+	local max, min = math.max(r, g, b), math.min(r, g, b)
+	if max == min then return 0, 0, min end
+	
+	local l = max + min
+	local d = max - min
+	local s
+	if l > 1 then s = d / (2 - l)
+	else s = d / l end
+	l = l / 2
+	if max == r then
+		h = (g - b) / d
+		if g < b then h = h + 6 end
+	elseif max == g then
+		h = (b - r) / d + 2
+	else
+		h = (r - g) / d + 4
+	end
+	return h, s, l
+end
+
+local to_rgb = function(h, s, l)
+	if s == 0 then return l,l,l end
+	local c
+	if l > 0.5 then c = (2 - 2 * l) * s
+	else c = (2 * l) * s end
+	m = l - c / 2
+	local x = h % 2
+	local r, g, b
+	if     h < 1 then b, r, g = 0, c, c * x
+	elseif h < 2 then b, g, r = 0, c, c * (2 - x)
+	elseif h < 3 then r, g, b = 0, c, c * x
+	elseif h < 4 then r, b, g = 0, c, c * (2 - x)
+	elseif h < 5 then g, b, r = 0, c, c * x
+	else			  g, r, b = 0, c, c * (2 - x)
+	end
+	r, g, b = (r + m) * 255, (g + m) * 255, (b + m) * 255
+	return r,g,b
+end
+
+-- add scheme-name, scheme-author and base00-hex - base0F-hex
+local add_std_vars = function(t, key, value)
+	if key == 'scheme' then
+		t['scheme-name'] = value
+		return
+	end
+	if key == 'author' then
+		t['scheme-author'] = value
+		return
+	end
+	t[key..'-hex'] = value
+end
+
+-- add base08-dim - base0F-dim (inactive colors)
+-- use base03(comment) lightness and reduce sat.
+local add_dim_vars = function(t)
+	local r, g, b = string.match(t['base03-hex'], '#?(%x%x)(%x%x)(%x%x)')
+	if r == nil then print('error - base03 value') return end
+	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
+	local h, s, l = to_hsl(r, g, b)
+	
+	local key
+	for i = 8, 15 do
+		key = _sf('base0%X', i)
+		r, g, b = string.match(t[key..'-hex'], '#?(%x%x)(%x%x)(%x%x)')
+		if r == nil then print('error - ' .. key .. ' value') return end
+		r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
+		h, s = to_hsl(r, g, b)
+		r, g, b = to_rgb(h, clamp(s * 0.4, 0, 1), l)
+		t[key..'-dim'] = _sf('%02x%02x%02x', r, g, b)
+	end
 end
 
 local load_scheme = function(dir, name)
@@ -48,21 +109,12 @@ local load_scheme = function(dir, name)
 	local key, value
 	local vars = {}
 	for line in io.lines(path) do
-		key, value = string.match(line, '^([%w]+)%s*:%s*"([^"]-)"')
+		key, value = string.match(line, '^%s*([%w]+)%s*:%s*"([^"]-)"')
 		if key and valid_yaml[key] then
-			vars[key] = value;
+			add_std_vars(vars, key, value)
 		end
 	end
-	vars['scheme-name']   = vars['scheme']
-	vars['scheme-author'] = vars['author']
-	vars['scheme-slug']   = _sf('base16-%s.properties', name)
-	for i = 0, 15 do
-		key = _sf('base0%X', i)
-		value = vars[key]
-		add_color_vars(vars, key, value)
-		--print(string.format('base0%X', i))
-	end
-	--print(scheme['base01-hex'])
+	add_dim_vars(vars, key, value)
 	print(_sf('* Scheme Name:   %s\n* Scheme Author: %s', vars['scheme-name'], vars['scheme-author']))
 	return vars
 end
@@ -73,13 +125,21 @@ local apply_scheme = function(dir, name)
 	local filler
 	local key, value
 	local line_no = 0
+	local f = function(key)
+		local aa = vars[key]
+		if aa ~= nil then
+			return aa
+		end
+		-- scripted colors (like brighter desat'd) and memoize
+		print(_sf('Key %s is unknown', key))
+	end
 	for line in io.lines(path) do
 		line_no = line_no + 1
 		filler = (line:match('%S') == nil) or (line:match('^%s*#') ~= nil)
 		if not filler then
-			key, value = string.match(line, '^([%w_.%-*]+)%s*=%s*([%w%p]*)')
+			key, value = string.match(line, '^%s*([%w_.%-*]+)%s*=%s*([%w%p]*)')
 			if key then
-				props[key] = value:gsub('{{([%w%-]+)}}', vars)
+				props[key] = value:gsub('{{([%w%-]+)}}', f)
 			else
 				print(_sf('ignoring line %i: %s', line_no, line))
 			end
@@ -166,6 +226,10 @@ else
 	
 	if param[1] == 'genprop' then
 		merge_props()
+		return
+	end
+	if param[1] == 'test' then
+		print('test')
 		return
 	end
 	print('unknown parameter ' .. param[1])

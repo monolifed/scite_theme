@@ -1,4 +1,6 @@
 local prop_list = {
+	-- removes definitions for missing ones
+	'lang_missing.properties',
 	'editor.properties',
 	'theme.properties',
 	'lang_all.properties',
@@ -6,6 +8,7 @@ local prop_list = {
 	'lang_batch.properties',
 	'lang_cpp.properties',
 	'lang_lua.properties',
+	'lang_html.properties',
 	'lang_makefile.properties',
 	'lang_props.properties',
 	'lang_ruby.properties',
