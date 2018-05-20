@@ -85,6 +85,7 @@ local scheme_list = {
 'porple',
 'railscasts',
 'rebecca',
+'scite',
 'seti',
 'shapeshifter',
 'solarflare',

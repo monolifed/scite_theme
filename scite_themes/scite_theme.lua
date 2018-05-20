@@ -1,4 +1,5 @@
 local _sf = string.format
+local _printf = function(...) print(_sf(...)) end
 
 local valid_yaml = {
 	scheme = '"([^"]-)"', -- Title
@@ -23,12 +24,15 @@ local valid_yaml = {
 
 local clamp = function(x, min, max)
 	if x > max then return max end
-	if x < min   then return min end
+	if x < min then return min end
 	return x
 end
 
-
+-- {r, g, b}:[0, 255]
 local to_hsl = function(r, g, b)
+	--[[
+	r, g, b = clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255)
+	--]]
 	r, g, b = r / 255, g / 255, b / 255
 	local max, min = math.max(r, g, b), math.min(r, g, b)
 	if max == min then return 0, 0, min end
@@ -50,23 +54,27 @@ local to_hsl = function(r, g, b)
 	return h, s, l
 end
 
+-- h:[0, 6] s:[0, 1] l:[0,1]
 local to_rgb = function(h, s, l)
+	--[[
+	h, s, l = h % 6, clamp(s, 0, 1), clamp(l, 0, 1)
+	--]]
 	if s == 0 then l = l * 255 return l,l,l end
 	local c
 	if l > 0.5 then c = (2 - 2 * l) * s
 	else c = (2 * l) * s end
 	m = l - c / 2
-	local x = h % 2
+	--local x = h % 2
 	local r, g, b
-	if     h < 1 then b, r, g = 0, c, c * x
-	elseif h < 2 then b, g, r = 0, c, c * (2 - x)
-	elseif h < 3 then r, g, b = 0, c, c * x
-	elseif h < 4 then r, b, g = 0, c, c * (2 - x)
-	elseif h < 5 then g, b, r = 0, c, c * x
-	else			  g, r, b = 0, c, c * (2 - x)
+	if     h < 1 then b, r, g = 0, c, c * h
+	elseif h < 2 then b, g, r = 0, c, c * (2 - h)
+	elseif h < 3 then r, g, b = 0, c, c * (h - 2)
+	elseif h < 4 then r, b, g = 0, c, c * (4 - h)
+	elseif h < 5 then g, b, r = 0, c, c * (h - 4)
+	else              g, r, b = 0, c, c * (6 - h)
 	end
 	r, g, b = (r + m) * 255, (g + m) * 255, (b + m) * 255
-	return r,g,b
+	return r, g, b
 end
 
 -- add scheme-name, scheme-author and base00-hex - base0F-hex
@@ -83,29 +91,37 @@ local add_std_vars = function(t, key, value)
 end
 
 -- add base08-dim - base0F-dim (inactive colors)
--- use base03(comment) lightness and reduce sat.
+-- use back/fore based lightness and reduce sat.
+local key_error = 'Error parsing value for key: '
 local add_dim_vars = function(t)
-	local r, g, b = string.match(t['base03-hex'], '#?(%x%x)(%x%x)(%x%x)')
-	if r == nil then print('error - base03 value') return end
+	local r, g, b = string.match(t['base00-hex'], '#?(%x%x)(%x%x)(%x%x)')
+	if r == nil then print(key_error .. 'base00-hex') return end
 	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
 	local h, s, l = to_hsl(r, g, b)
+
+	r, g, b = string.match(t['base05-hex'], '#?(%x%x)(%x%x)(%x%x)')
+	if r == nil then print(key_error .. 'base05-hex') return end
+	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
+	local lfg
+	_, _, lfg = to_hsl(r, g, b)
+	
+	l = l + 0.4 * (lfg - l)
+	r, g, b = to_rgb(h, s * 0.4, l)
+	t['base03-dim'] = _sf('%02x%02x%02x', r, g, b)
 	
 	local key
 	for i = 8, 15 do
 		key = _sf('base0%X', i)
 		r, g, b = string.match(t[key..'-hex'], '#?(%x%x)(%x%x)(%x%x)')
-		if r == nil then print('error - ' .. key .. ' value') return end
+		if r == nil then print(key_error .. key) return end
 		r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
 		h, s = to_hsl(r, g, b)
-		r, g, b = to_rgb(h, clamp(s * 0.4, 0, 1), l)
+		r, g, b = to_rgb(h, s * 0.4, l)
 		t[key..'-dim'] = _sf('%02x%02x%02x', r, g, b)
 	end
 end
 
-local load_scheme = function(dir, name)
-	local path = _sf('%s/%s.yaml', dir, name)
-	print(_sf('* Loading file %s', path))
-	
+local load_scheme = function(path)
 	local key, value
 	local vars = {}
 	for line in io.lines(path) do
@@ -115,46 +131,48 @@ local load_scheme = function(dir, name)
 		end
 	end
 	add_dim_vars(vars, key, value)
-	print(_sf('* Scheme Name:   %s\n* Scheme Author: %s', vars['scheme-name'], vars['scheme-author']))
 	return vars
 end
 
-local apply_scheme = function(dir, name)
-	local vars = load_scheme(dir..'/schemes', name)
-	local path = _sf('%s/merged.properties', dir)
+local apply_scheme = function(name)
+	local dir = props['ext.lua.theme_dir']
+	local scheme_path = _sf('%s/schemes/%s.yaml', dir, name)
+	local template_path = _sf('%s/merged.properties', dir)
+	
+	local vars = load_scheme(scheme_path)
+	--local path = _sf('%s/merged.properties', dir)
 	local filler
 	local key, value
 	local line_no = 0
-	local f = function(key)
-		local aa = vars[key]
-		if aa ~= nil then
-			return aa
+	local mf = function(key)
+		local kv = vars[key]
+		if kv ~= nil then
+			return kv
 		end
 		-- scripted colors (like brighter desat'd) and memoize
-		print(_sf('Key %s is unknown', key))
+		_printf('Key %s is unknown', key)
 	end
-	for line in io.lines(path) do
+	for line in io.lines(template_path) do
 		line_no = line_no + 1
 		filler = (line:match('%S') == nil) or (line:match('^%s*#') ~= nil)
 		if not filler then
 			key, value = string.match(line, '^%s*([%w_.%-*]+)%s*=%s*([%w%p]*)')
 			if key then
-				props[key] = value:gsub('{{([%w%-]+)}}', f)
+				props[key] = value:gsub('{{([%w%-]+)}}', mf)
 			else
-				print(_sf('ignoring line %i: %s', line_no, line))
+				_printsf('ignoring line %i: %s', line_no, line)
 			end
 		end
 	end
+	return vars['scheme-name'], vars['scheme-author']
 end
 
 -- Change to the fixed theme defined in user properties file
 function change_theme()
-	local dir = props['ext.lua.theme_dir']
 	local name = props['ext.lua.theme']:lower():gsub(' ','-')
+	local title, author = apply_scheme(name)
+	_printf('schemes/%s.yaml:1: "%s" by "%s"', name, title, author)
 	props['ext.lua.theme_now'] = name
-	--print(theme_name)
-	apply_scheme(dir, name)
-	print('* [Done]')
 end
 
 -- Change to the next theme (resets to the fixed one after restart)
@@ -171,13 +189,13 @@ function cycle_theme(step)
 		end
 	end
 	if list_cur == 0 then
-		return
+		list_cur = 1
 	end
 	list_cur = 1 + ((list_cur + step - 1) % list_len)
 	name = list[list_cur]
+	local title, author = apply_scheme(name)
+	_printf('schemes/%s.yaml:1: "%s" by "%s" (%i/%i)', name, title, author, list_cur, list_len)
 	props['ext.lua.theme_now'] = name
-	apply_scheme(dir, name)
-	print(_sf("* [Done %i/%i %s]", list_cur, list_len, name))
 end
 
 function next_theme()
