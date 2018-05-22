@@ -1,26 +1,82 @@
 local _sf = string.format
 local _printf = function(...) print(_sf(...)) end
 
-local valid_yaml = {
-	scheme = '"([^"]-)"', -- Title
-	author = '"([^"]-)"', -- Author
-	base00 = '(%x%x%x%x%x%x)', -- Default Background
-	base01 = '(%x%x%x%x%x%x)', -- Lighter Background (Used for status bars)
-	base02 = '(%x%x%x%x%x%x)', -- Selection Background
-	base03 = '(%x%x%x%x%x%x)', -- Comments, Invisibles, Line Highlighting
-	base04 = '(%x%x%x%x%x%x)', -- Dark Foreground (Used for status bars)
-	base05 = '(%x%x%x%x%x%x)', -- Default Foreground, Caret, Delimiters, Operators
-	base06 = '(%x%x%x%x%x%x)', -- Light Foreground (Not often used)
-	base07 = '(%x%x%x%x%x%x)', -- Light Background (Not often used)
-	base08 = '(%x%x%x%x%x%x)', -- Variables, XML Tags, Markup Link Text, Markup Lists, Diff Delete
-	base09 = '(%x%x%x%x%x%x)', -- Integers, Boolean, Constants, XML Attributes, Markup Link Url
-	base0A = '(%x%x%x%x%x%x)', -- Classes, Markup Bold, Search Text Background
-	base0B = '(%x%x%x%x%x%x)', -- Strings, Inherited Class, Markup Code, Diff Inserted
-	base0C = '(%x%x%x%x%x%x)', -- Support, Regular Expressions, Escape Characters, Markup Quotes
-	base0D = '(%x%x%x%x%x%x)', -- Functions, Methods, Attribute IDs, Headings
-	base0E = '(%x%x%x%x%x%x)', -- Keywords, Storage, Selector, Markup Italic, Diff Changed
-	base0F = '(%x%x%x%x%x%x)', -- Deprecated, Opening/Closing Embedded Language Tags e.g. <?php ?>
+local yaml_map = {
+	scheme = 'scheme-name',
+	author = 'scheme-author',
+	base00 = 'back',
+	base01 = 'lnback',
+	base02 = 'whitespace',
+	base03 = 'comment',
+	base04 = 'lnfore',
+	base05 = 'fore',
+	base06 = 'operator',
+	base07 = 'highlight',
+	base08 = 'variable',
+	base09 = 'number',
+	base0A = 'class',
+	base0B = 'string',
+	base0C = 'support',
+	base0D = 'function',
+	base0E = 'keyword',
+	base0F = 'embed',
 }
+
+local yaml_parse = function(path)
+	local key, value
+	local vars = {}
+	for line in io.lines(path) do
+		key, value = string.match(line, '^%s*([%w]+)%s*:%s*"([^"]-)"')
+		key = key and yaml_map[key]
+		if key ~= nil then
+			vars[key] = value
+		end
+	end
+	for id, k in pairs(yaml_map) do
+		if vars[k] == nil then 
+		_printf('missing value %s in %s', id, path) return end
+	end
+	return vars
+end
+
+local json_map = {
+	name = 'scheme-name',
+	author = 'scheme-author',
+	background = 'back',
+	line_highlight = 'lnback',
+	invisibles = 'whitespace',
+	comment = 'comment',
+	docblock = 'lnfore',
+	foreground = 'fore',
+	caret = 'operator',
+	selection_foreground = 'highlight',
+	fifth = 'variable',
+	number = 'number',
+	second = 'class',
+	string = 'string',
+	first = 'support',
+	third = 'function',
+	fourth = 'keyword',
+	brackets = 'embed',
+}
+
+local json_parse = function(path)
+	local key, value
+	local vars = {}
+	for line in io.lines(path) do
+		key, value = string.match(line, '^%s*"([%w_]+)"%s*:%s*"#?([^"]-)"')
+		--print(key, value)
+		key = key and json_map[key]
+		if key ~= nil then
+			vars[key] = value
+		end
+	end
+	for id, k in pairs(json_map) do
+		if vars[k] == nil then 
+		_printf('missing value %s in %s', id, path) return end
+	end
+	return vars
+end
 
 local clamp = function(x, min, max)
 	if x > max then return max end
@@ -77,69 +133,88 @@ local to_rgb = function(h, s, l)
 	return r, g, b
 end
 
--- add scheme-name, scheme-author and base00-hex - base0F-hex
-local add_std_vars = function(t, key, value)
-	if key == 'scheme' then
-		t['scheme-name'] = value
-		return
-	end
-	if key == 'author' then
-		t['scheme-author'] = value
-		return
-	end
-	t[key..'-hex'] = value
-end
 
--- add base08-dim - base0F-dim (inactive colors)
+local dim_list = {'operator', 'comment', 'variable', 'number', 'class',
+	'string','support', 'function', 'keyword', 'embed'}
+
+-- add inactive (dim) colors
 -- use back/fore based lightness and reduce sat.
 local key_error = 'Error parsing value for key: '
-local add_dim_vars = function(t)
-	local r, g, b = string.match(t['base00-hex'], '#?(%x%x)(%x%x)(%x%x)')
-	if r == nil then print(key_error .. 'base00-hex') return end
+local add_dim_vars = function(t, fill)
+	local r, g, b = string.match(t['back'], '#?(%x%x)(%x%x)(%x%x)')
+	if r == nil then print(key_error .. 'back') return end
 	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
 	local h, s, l = to_hsl(r, g, b)
 
-	r, g, b = string.match(t['base05-hex'], '#?(%x%x)(%x%x)(%x%x)')
-	if r == nil then print(key_error .. 'base05-hex') return end
+	r, g, b = string.match(t['fore'], '#?(%x%x)(%x%x)(%x%x)')
+	if r == nil then print(key_error .. 'fore') return end
 	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
-	local lfg
-	_, _, lfg = to_hsl(r, g, b)
+	local H, S, L = to_hsl(r, g, b)
 	
-	l = l + 0.4 * (lfg - l)
+	if fill then
+		t['lnback'] = _sf('%02x%02x%02x', to_rgb(h, s, l + 0.2 * (L - l)))
+		t['whitespace'] = _sf('%02x%02x%02x', to_rgb(h, s, l + 0.4 * (L - l)))
+		t['comment'] = _sf('%02x%02x%02x', to_rgb(H, S, l + 0.6 * (L - l)))
+		t['lnfore'] = _sf('%02x%02x%02x', to_rgb(H, S, l + 0.8 * (L - l)))
+	end
+	
+	l = l + 0.4 * (L - l)
 	r, g, b = to_rgb(h, s * 0.4, l)
-	t['base03-dim'] = _sf('%02x%02x%02x', r, g, b)
+	t['fore-dim'] = _sf('%02x%02x%02x', r, g, b)
 	
 	local key
-	for i = 8, 15 do
-		key = _sf('base0%X', i)
-		r, g, b = string.match(t[key..'-hex'], '#?(%x%x)(%x%x)(%x%x)')
-		if r == nil then print(key_error .. key) return end
+	for i, v in ipairs(dim_list) do
+		key = v
+		r, g, b = string.match(t[v], '#?(%x%x)(%x%x)(%x%x)')
+		if r == nil then print(key_error .. v) return end
 		r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
 		h, s = to_hsl(r, g, b)
 		r, g, b = to_rgb(h, s * 0.4, l)
-		t[key..'-dim'] = _sf('%02x%02x%02x', r, g, b)
+		t[v..'-dim'] = _sf('%02x%02x%02x', r, g, b)
 	end
 end
 
-local load_scheme = function(path)
-	local key, value
-	local vars = {}
-	for line in io.lines(path) do
-		key, value = string.match(line, '^%s*([%w]+)%s*:%s*"([^"]-)"')
-		if key and valid_yaml[key] then
-			add_std_vars(vars, key, value)
-		end
-	end
-	add_dim_vars(vars, key, value)
-	return vars
+local isfile = function(fname)
+	local f = io.open(fname, 'r')
+	if f then io.close(f) return true end
+	return false
+end
+
+local locate_scheme = function(pdir, name)
+	local s = name
+	if isfile(_sf('%s/%s', pdir, s)) then return s end
+	s = _sf('base16/%s.yaml', name)
+	if isfile(_sf('%s/%s', pdir, s)) then return s end
+	s = _sf('daylerees/%s.json', name)
+	if isfile(_sf('%s/%s', pdir, s)) then return s end
 end
 
 local apply_scheme = function(name)
 	local dir = props['ext.lua.theme_dir']
-	local scheme_path = _sf('%s/schemes/%s.yaml', dir, name)
 	local template_path = _sf('%s/merged.properties', dir)
+	dir = _sf('%s/schemes', dir)
 	
-	local vars = load_scheme(scheme_path)
+	local scheme_path, filetype
+	name = locate_scheme(dir, name)
+	if name then
+		filetype = name:sub(-5)
+		scheme_path = _sf('%s/%s', dir, name)
+	else
+		_printf("No file exists with name: %s", name)
+		return
+	end
+	
+	local vars
+	if filetype == '.yaml' then
+		vars = yaml_parse(scheme_path)
+	elseif filetype == '.json' then
+		vars = json_parse(scheme_path)
+	else
+		print("Unknown Not Implemented Yet.")
+		return
+	end
+
+	add_dim_vars(vars)
 	--local path = _sf('%s/merged.properties', dir)
 	local filler
 	local key, value
@@ -147,6 +222,7 @@ local apply_scheme = function(name)
 	local mf = function(key)
 		local kv = vars[key]
 		if kv ~= nil then
+			--print(key, kv)
 			return kv
 		end
 		-- scripted colors (like brighter desat'd) and memoize
@@ -160,19 +236,18 @@ local apply_scheme = function(name)
 			if key then
 				props[key] = value:gsub('{{([%w%-]+)}}', mf)
 			else
-				_printsf('ignoring line %i: %s', line_no, line)
+				_printf('ignoring line %i: %s', line_no, line)
 			end
 		end
 	end
-	return vars['scheme-name'], vars['scheme-author']
+	_printf('Using theme "%s" by "%s"', vars['scheme-name'], vars['scheme-author'])
+	props['ext.lua.theme_now'] = name
 end
 
 -- Change to the fixed theme defined in user properties file
 function change_theme()
 	local name = props['ext.lua.theme']:lower():gsub(' ','-')
-	local title, author = apply_scheme(name)
-	_printf('schemes/%s.yaml:1: "%s" by "%s"', name, title, author)
-	props['ext.lua.theme_now'] = name
+	apply_scheme(name)
 end
 
 -- Change to the next theme (resets to the fixed one after restart)
@@ -193,9 +268,8 @@ function cycle_theme(step)
 	end
 	list_cur = 1 + ((list_cur + step - 1) % list_len)
 	name = list[list_cur]
-	local title, author = apply_scheme(name)
-	_printf('schemes/%s.yaml:1: "%s" by "%s" (%i/%i)', name, title, author, list_cur, list_len)
-	props['ext.lua.theme_now'] = name
+	apply_scheme(name)
+	_printf('(%i of %i)', list_cur, list_len)
 end
 
 function next_theme()
