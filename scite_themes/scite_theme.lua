@@ -75,6 +75,7 @@ local json_parse = function(path)
 		if vars[k] == nil then 
 		_printf('missing value %s in %s', id, path) return end
 	end
+	vars['whitespace'] = vars['lnback']
 	return vars
 end
 
@@ -181,12 +182,19 @@ local isfile = function(fname)
 end
 
 local locate_scheme = function(pdir, name)
-	local s = name
-	if isfile(_sf('%s/%s', pdir, s)) then return s end
-	s = _sf('base16/%s.yaml', name)
-	if isfile(_sf('%s/%s', pdir, s)) then return s end
-	s = _sf('daylerees/%s.json', name)
-	if isfile(_sf('%s/%s', pdir, s)) then return s end
+	pdir = pdir .. '/'
+	if isfile(pdir .. name) then return name end
+	
+	local s
+	s = name .. '.yaml'
+	if isfile(pdir .. s) then return s end
+	s = 'base16/' .. s
+	if isfile(pdir .. s) then return s end
+	
+	s = name .. '.json'
+	if isfile(pdir .. s) then return s end
+	s = 'daylerees/' .. s
+	if isfile(pdir .. s) then return s end
 end
 
 local apply_scheme = function(name)
