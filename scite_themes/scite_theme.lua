@@ -288,49 +288,6 @@ function prev_theme()
 	cycle_theme(-1)
 end
 
--- Used from the command line as:
--- lua scite_theme.lua genprop
-local merge_props = function()
-	local sep = string.rep('#####', 10) .. '\n'
-	local append_file = function(f, unit, title)
-		if not title then title = unit end
-		f:write(sep)
-		f:write(_sf('# [%s]\n', title))
-		f:write(sep)
-		f:write('\n')
-		for line in io.lines(unit) do
-			f:write(line)
-			f:write('\n')
-		end
-		f:write('\n\n')
-		--f:write(sep)
-	end
-	
-	local path = 'merged.properties'
-	local merged = io.open(path,'w')
-	local list = dofile('prop_list.lua')
-	for i, v in ipairs(list) do
-		append_file(merged, 'props/' .. v, v)
-	end
-	merged:close()
-end
-
 if props then
 	change_theme()
-else
-	local param = table.pack(...)
-	if #param == 0 then
-		print('No parameter given')
-		return
-	end
-	
-	if param[1] == 'genprop' then
-		merge_props()
-		return
-	end
-	if param[1] == 'test' then
-		print('test')
-		return
-	end
-	print('unknown parameter ' .. param[1])
 end

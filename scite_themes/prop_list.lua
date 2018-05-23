@@ -1,8 +1,10 @@
-local prop_list = {
+-- order is important
+return {
 	-- removes definitions for missing ones
 	'lang_missing.properties',
 	'editor.properties',
 	'theme.properties',
+	
 	'lang_all.properties',
 	'lang_bash.properties',
 	'lang_batch.properties',
@@ -12,9 +14,7 @@ local prop_list = {
 	'lang_makefile.properties',
 	'lang_props.properties',
 	'lang_ruby.properties',
-
-	
 	'lang_yaml.properties',
+	
 	'errorlist.properties',
 }
-return prop_list
