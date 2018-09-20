@@ -160,7 +160,6 @@ return {
 	'daylerees/laravel.json',
 	'daylerees/lavender.json',
 	'daylerees/legacy.json',
-	'daylerees/LICENSE.txt',
 	'daylerees/light/earthsong.json',
 	'daylerees/light/snappy.json',
 	'daylerees/light/userscape.json',

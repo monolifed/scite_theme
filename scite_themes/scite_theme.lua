@@ -120,8 +120,8 @@ local to_rgb = function(h, s, l)
 	local c
 	if l > 0.5 then c = (2 - 2 * l) * s
 	else c = (2 * l) * s end
-	m = l - c / 2
-	--local x = h % 2
+	local m = l - c / 2
+	
 	local r, g, b
 	if     h < 1 then b, r, g = 0, c, c * h
 	elseif h < 2 then b, g, r = 0, c, c * (2 - h)
@@ -182,80 +182,86 @@ local isfile = function(fname)
 end
 
 local locate_scheme = function(pdir, name)
-	pdir = pdir .. '/'
+	--pdir = pdir .. '/'
 	if isfile(pdir .. name) then return name end
 	
-	local s
-	s = name .. '.yaml'
-	if isfile(pdir .. s) then return s end
-	s = 'base16/' .. s
-	if isfile(pdir .. s) then return s end
+	local search = {'%s.yaml', 'base16/%s', 'base16/%s.yaml',
+		'%s.json', 'daylerees/%s', 'daylerees/%s.json'}
 	
-	s = name .. '.json'
-	if isfile(pdir .. s) then return s end
-	s = 'daylerees/' .. s
-	if isfile(pdir .. s) then return s end
+	local s
+	for i, fmt in ipairs(search) do
+		s = _sf(fmt, name)
+		if isfile(pdir .. s) then return s end
+	end
 end
 
+
 local apply_scheme = function(name)
-	local dir = props['ext.lua.theme_dir']
-	local template_path = _sf('%s/merged.properties', dir)
-	dir = _sf('%s/schemes', dir)
+	local theme_dir = props['ext.lua.theme_dir']
+	local schemes_dir = theme_dir .. '/schemes/'
+	local props_dir = theme_dir .. '/props/'
 	
-	local scheme_path, filetype
-	name = locate_scheme(dir, name)
-	if name then
-		filetype = name:sub(-5)
-		scheme_path = _sf('%s/%s', dir, name)
-	else
-		_printf("No file exists with name: %s", name)
+	local scheme_path = locate_scheme(schemes_dir, name)
+	if not scheme_path then
+		_printf('File "%s" cannot be found', name)
 		return
 	end
 	
+	name = scheme_path
+	scheme_path = schemes_dir .. scheme_path
+	
 	local vars
+	local filetype = scheme_path:sub(-5)
 	if filetype == '.yaml' then
 		vars = yaml_parse(scheme_path)
 	elseif filetype == '.json' then
 		vars = json_parse(scheme_path)
 	else
-		print("Unknown Not Implemented Yet.")
+		_printf('Filetype "%s" is not supported', filetype)
 		return
 	end
 
 	add_dim_vars(vars)
-	--local path = _sf('%s/merged.properties', dir)
-	local filler
-	local key, value
-	local line_no = 0
+
 	local mf = function(key)
 		local kv = vars[key]
 		if kv ~= nil then
 			--print(key, kv)
 			return kv
 		end
-		-- scripted colors (like brighter desat'd) and memoize
-		_printf('Key %s is unknown', key)
+		-- TODO: scripted colors (like brighter desat'd) and memoize
+		_printf('Key "%s" is unknown', key)
 	end
-	for line in io.lines(template_path) do
-		line_no = line_no + 1
-		filler = (line:match('%S') == nil) or (line:match('^%s*#') ~= nil)
-		if not filler then
-			key, value = string.match(line, '^%s*([%w_.%-*]+)%s*=%s*([%w%p]*)')
-			if key then
-				props[key] = value:gsub('{{([%w%-]+)}}', mf)
-			else
-				_printf('ignoring line %i: %s', line_no, line)
+
+	local filler
+	local key, value
+	local line_no = 0
+	local list = dofile(theme_dir .. '/prop_list.lua')
+	local template_path
+	for i, v in ipairs(list) do
+		template_path = props_dir .. v
+		for line in io.lines(template_path) do
+			line_no = line_no + 1
+			filler = (line:match('%S') == nil) or (line:match('^%s*#') ~= nil)
+			if not filler then
+				key, value = string.match(line, '^%s*([%w_.%-*]+)%s*=%s*([%w%p]*)')
+				if key then
+					props[key] = value:gsub('{{([%w%-]+)}}', mf)
+				else
+					_printf('ignoring line %i: %s', line_no, line)
+				end
 			end
 		end
 	end
-	_printf('Using theme "%s" by "%s"', vars['scheme-name'], vars['scheme-author'])
+	--_printf('Using theme "%s" by "%s"', vars['scheme-name'], vars['scheme-author'])
 	props['ext.lua.theme_now'] = name
 end
 
 -- Change to the fixed theme defined in user properties file
 function change_theme()
-	local name = props['ext.lua.theme']:lower():gsub(' ','-')
+	local name = props['ext.lua.theme']:lower():gsub(' ','-'):gsub('[,]','')
 	apply_scheme(name)
+	_printf('Using "%s"', props['ext.lua.theme_now'])
 end
 
 -- Change to the next theme (resets to the fixed one after restart)
@@ -277,7 +283,7 @@ function cycle_theme(step)
 	list_cur = 1 + ((list_cur + step - 1) % list_len)
 	name = list[list_cur]
 	apply_scheme(name)
-	_printf('(%i of %i)', list_cur, list_len)
+	_printf('Using "%s" %i/%i', props['ext.lua.theme_now'], list_cur, list_len)
 end
 
 function next_theme()
