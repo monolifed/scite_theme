@@ -2,7 +2,6 @@
 return {
 	-- removes definitions for missing ones
 	'lang_missing.properties',
-	'editor.properties',
 	'theme.properties',
 	
 	'lang_all.properties',

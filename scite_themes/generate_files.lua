@@ -1,6 +1,6 @@
 #! /usr/bin/env luajit
 
--- creates scheme_list.lua and merged.properties
+-- creates scheme_list.lua
 local cmd =
 [[find schemes/ -name '*.json' -o -name '*.yaml'|sort]]
 local gen_scheme_list_lua = function()
@@ -16,29 +16,4 @@ local gen_scheme_list_lua = function()
     f:close()
 end
 
-local gen_merged_properties = function()
-	local sep = string.rep('#####', 10) .. '\n'
-	local append_file = function(f, unit, title)
-		if not title then title = unit end
-		f:write(sep)
-		f:write('# [' .. title .. ']\n')
-		f:write(sep)
-		f:write('\n')
-		for line in io.lines(unit) do
-			f:write(line)
-			f:write('\n')
-		end
-		f:write('\n\n')
-		--f:write(sep)
-	end
-	
-	local merged = io.open('merged.properties','w')
-	local list = dofile('prop_list.lua')
-	for i, v in ipairs(list) do
-		append_file(merged, 'props/' .. v, v)
-	end
-	merged:close()
-end
-
 gen_scheme_list_lua()
-gen_merged_properties()
