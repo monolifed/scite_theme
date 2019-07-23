@@ -1,4 +1,5 @@
 local _sf = string.format
+local _mf = math.floor
 local _printf = function(...) print(_sf(...)) end
 
 local split = function(s)
@@ -55,10 +56,12 @@ local to_hsl = function(r, g, b)
 	return h, s, l
 end
 
+local FF = function(a) return _mf(a * 0xFF) end
+
 -- h in [0, 6], s in [0, 1], l in [0,1]
 local to_rgb = function(h, s, l)
 	--h, s, l = h % 6, clamp(s, 0, 1), clamp(l, 0, 1)
-	if s == 0 then l = l * 0xFF return l,l,l end
+	if s == 0 then l = FF(l) return l,l,l end
 	
 	local c, m
 	if l > 0.5 then c = (2 - 2 * l) * s
@@ -73,7 +76,7 @@ local to_rgb = function(h, s, l)
 	elseif h < 5 then g, b, r = 0, c, c * (h - 4)
 	else              g, r, b = 0, c, c * (6 - h)
 	end
-	return (r + m) * 0xFF, (g + m) * 0xFF, (b + m) * 0xFF
+	return FF(r + m), FF(g + m), FF(b + m)
 end
 
 local rgbstr_to_hsl = function(s)
