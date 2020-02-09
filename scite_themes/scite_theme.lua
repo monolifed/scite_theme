@@ -266,6 +266,10 @@ local apply_scheme = function(name)
 			end
 		end
 	end
+	local r, g, b = table.unpack(vars["variable"])
+	r, g, b = to_rgb(r, g, b)
+	editor.CallTipForeHlt = 256 * (256 * b + g) + r
+
 	--_printf('Using theme "%s" by "%s"', vars['name'], vars['author'])
 	props['ext.lua.theme_now'] = name
 end
