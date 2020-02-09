@@ -41,9 +41,8 @@ local to_hsl = function(r, g, b)
 	local max, min = math.max(r, g, b), math.min(r, g, b)
 	if max == min then return 0, 0, min end
 	
-	local l, d, s = max + min, max - min
-	if l > 1 then s = d / (2 - l)
-	else s = d / l end
+	local l, d = max + min, max - min
+	local s, h = d / (l > 1 and (2 - l) or l)
 	l = l / 2
 	if max == r then
 		h = (g - b) / d
@@ -266,9 +265,10 @@ local apply_scheme = function(name)
 			end
 		end
 	end
+
 	local r, g, b = table.unpack(vars["variable"])
 	r, g, b = to_rgb(r, g, b)
-	editor.CallTipForeHlt = 256 * (256 * b + g) + r
+	editor.CallTipForeHlt = 0xFF * (0xFF * b + g) + r
 
 	--_printf('Using theme "%s" by "%s"', vars['name'], vars['author'])
 	props['ext.lua.theme_now'] = name
