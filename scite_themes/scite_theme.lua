@@ -192,6 +192,11 @@ local locate_scheme = function(pdir, name)
 	end
 end
 
+local CallTipForeHlt
+local setCallTipForeHlt = function()
+	editor.CallTipForeHlt = CallTipForeHlt
+	return true
+end
 
 local apply_scheme = function(name)
 	local theme_dir = props['ext.lua.theme_dir']
@@ -266,10 +271,12 @@ local apply_scheme = function(name)
 		end
 	end
 
-	local r, g, b = table.unpack(vars["variable"])
-	r, g, b = to_rgb(r, g, b)
-	editor.CallTipForeHlt = 0xFF * (0xFF * b + g) + r
-
+	local r, g, b = to_rgb(table.unpack(vars["variable"]))
+	CallTipForeHlt = r + 0x100 * g + 0x10000 * b
+	if not pcall(setCallTipForeHlt) then
+		OnOpen = setCallTipForeHlt
+	end
+	
 	--_printf('Using theme "%s" by "%s"', vars['name'], vars['author'])
 	props['ext.lua.theme_now'] = name
 end
@@ -314,3 +321,4 @@ end
 if props then
 	change_theme()
 end
+
