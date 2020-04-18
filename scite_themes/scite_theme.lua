@@ -23,6 +23,11 @@ local mix = function(m, a, b)
 	return clamp((1 - m) * a + m * b, 0, 1)
 end
 
+local adjmix = function(m, x, min, max)
+	if m > 1 then return mix(m - 1, x, max) end
+	return mix(m, min, x)
+end
+
 -- from 0 (m=0) to a (m=1) to 1 (m=2); a in [0, 1]
 local adj = function(m, a)
 	if m == 1 then return a end
@@ -207,6 +212,7 @@ local apply_scheme = function(name)
 	local ldim = tonumber(props['ext.lua.theme_ldim']) or 0.5
 	local sadj = tonumber(props['ext.lua.theme_sadj']) or 1.0
 	local ladj = tonumber(props['ext.lua.theme_ladj']) or 1.0
+	local wsadj = tonumber(props['ext.lua.theme_wsadj']) or 0.5
 	
 	local scheme_path = locate_scheme(schemes_dir, name)
 	if not scheme_path then
@@ -226,6 +232,8 @@ local apply_scheme = function(name)
 	end
 
 	adjust_colors(vars, sadj, ladj)
+	local ws = vars.whitespace
+	vars.whitespace = {ws[1], ws[2], adjmix(wsadj, ws[3], vars.back[3], vars.fore[3])}
 
 	local curline_no = 0
 	local curline = ''
@@ -243,7 +251,7 @@ local apply_scheme = function(name)
 		if args[1] == 'dim' and #args == 2 then
 			vk = vars[args[2]]
 			if vk ~= nil then
-				vk = {vk[1], adj(sdim, vk[2]), mix(ldim, vars.back[3], vars.fore[3])}
+				vk = {vk[1], adj(sdim, vk[2]), adjmix(ldim, vk[3], vars.back[3], vars.fore[3])}
 				vars[args[2]..'-dim'] = vk
 				return hsl_to_rgbstr(vk[1], vk[2], vk[3])
 			end
