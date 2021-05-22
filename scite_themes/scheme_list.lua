@@ -25,8 +25,6 @@ return {
 	'base16/atelier-sulphurpool-light.yaml',
 	'base16/atelier-sulphurpool.yaml',
 	'base16/atlas.yaml',
-	'base16/base16-unikitty-dark.yaml',
-	'base16/base16-unikitty-light.yaml',
 	'base16/bespin.yaml',
 	'base16/black-metal-bathory.yaml',
 	'base16/black-metal-burzum.yaml',
