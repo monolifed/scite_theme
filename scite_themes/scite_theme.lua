@@ -197,10 +197,35 @@ local locate_scheme = function(pdir, name)
 	end
 end
 
-local CallTipForeHlt
-local setCallTipForeHlt = function()
-	editor.CallTipForeHlt = CallTipForeHlt
-	return true
+OnOpenEvents = {} -- push to this if you need to use onopen
+OnOpen = function(...)
+	for i, e in ipairs(OnOpenEvents) do e(...) end
+end
+
+local CallTipHlt
+local function setCallTipHlt()
+	editor.CallTipForeHlt = CallTipHlt
+end
+
+local function setCallTipHlt_OnOpen(...)
+	setCallTipHlt(CallTipHlt)
+	for i = #OnOpenEvents, 1 do
+		if OnOpenEvents[i] == setCallTipHlt_OnOpen then
+			table.remove(OnOpenEvents, i)
+		end
+	end
+end
+
+local function setCallTipHighlight(hsl)
+	local r, g, b = to_rgb(hsl[1], hsl[2], hsl[3])
+	CallTipHlt = r + 0x100 * g + 0x10000 * b
+	if pcall(setCallTipHlt) then -- this may fail if there is no pane
+		return
+	end
+	for i, f in ipairs(OnOpenEvents) do
+		if f == setCallTipHlt_OnOpen then return end
+	end
+	table.insert(OnOpenEvents, 1, setCallTipHlt_OnOpen)
 end
 
 local apply_scheme = function(name)
@@ -278,13 +303,8 @@ local apply_scheme = function(name)
 			end
 		end
 	end
-
-	local r, g, b = to_rgb(table.unpack(vars["variable"]))
-	CallTipForeHlt = r + 0x100 * g + 0x10000 * b
-	if not pcall(setCallTipForeHlt) then
-		OnOpen = setCallTipForeHlt
-	end
 	
+	setCallTipHighlight(vars["variable"])
 	--_printf('Using theme "%s" by "%s"', vars['name'], vars['author'])
 	props['ext.lua.theme_now'] = name
 end
